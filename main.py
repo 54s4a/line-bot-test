@@ -31,7 +31,7 @@ def get_system_prompt(stage):
 def generate_reply(stage, user_input):
     system_prompt = get_system_prompt(stage)
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-3.5-turbo"
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_input}
