@@ -1,7 +1,8 @@
 import os
-
-# Renderではこの行が無視されても動くようにしておく
+import openai   # ←これを追加！
+from flask import Flask, request, abort
 from dotenv import load_dotenv
+
 load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
