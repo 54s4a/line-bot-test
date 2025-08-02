@@ -1,7 +1,13 @@
 import os
-import openai   # ←これを追加！
+import openai
 from flask import Flask, request, abort
 from dotenv import load_dotenv
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+
+load_dotenv()
+
 
 load_dotenv()
 
