@@ -36,8 +36,8 @@ def generate_reply(stage, user_input):
         )
         return response.choices[0].message['content'].strip()
     except Exception as e:
-        print(f"OpenAI API error: {e}")
-        return "ChatGPTへの接続に失敗しました。APIキーまたはモデル設定をご確認ください。"
+        print(f"APIエラー内容: {e}")
+        return "内部エラーが発生しました。"
 
 # LINEからのWebhook
 @app.route("/callback", methods=['POST'])
