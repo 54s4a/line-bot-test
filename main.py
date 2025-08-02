@@ -8,8 +8,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 load_dotenv()
 
-
-load_dotenv()
+from linebot import LineBotApi, WebhookHandler
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
