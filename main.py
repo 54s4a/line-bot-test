@@ -1,7 +1,7 @@
 import os
 from flask import Flask, request, abort
 from dotenv import load_dotenv
-import openai
+from openai import OpenAI
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
@@ -10,7 +10,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 load_dotenv()
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
-openai.api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 app = Flask(__name__)
 
@@ -25,19 +25,19 @@ def get_system_prompt(stage):
 def generate_reply(stage, user_input):
     system_prompt = get_system_prompt(stage)
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        r = client.chat.completions.create(
+            model="gpt-4o-mini",  # 必要に応じて "gpt-4o" に変更可
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input}
+                {"role": "user",   "content": user_input},
             ],
             temperature=0.7,
-            max_tokens=600
+            max_tokens=600,
         )
-        return response.choices[0].message['content'].strip()
+        return r.choices[0].message.content.strip()
     except Exception as e:
-        print(f"APIエラー内容: {e}")
-        return "内部エラーが発生しました。"
+        app.logger.exception(f"OpenAI error: {e}")
+        return "ごめん、内部でエラーが出てる。少し待ってもう一度送って。"
 
 # LINEからのWebhook
 @app.route("/callback", methods=['POST'])
