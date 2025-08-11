@@ -68,7 +68,9 @@ def handle_message(event):
         TextSendMessage(text=reply_text)
     )
 
-# 起動用（Renderでは不要な場合もあり）
-# if __name__ == "__main__":
-#     app.run()
+# 末尾にこれを入れる/コメント解除する
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 10000))  # Renderが渡すPORTで待受
+    app.run(host="0.0.0.0", port=port)
 
