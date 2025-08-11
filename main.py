@@ -346,3 +346,118 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
+@@
+-from pathlib import Path
++from pathlib import Path
+@@
+ _PROFILE_PATH = Path(__file__).parent / "asaoka_profile.json"
++_PLAYBOOK_PATH = Path(__file__).parent / "asaoka_playbooks.json"
++_REDFLAGS_PATH = Path(__file__).parent / "asaoka_redflags.json"
++_PHRASEBANK_PATH = Path(__file__).parent / "asaoka_phrasebank.json"
+ _profile_cache = {"data": None, "mtime": 0}
++_playbook_cache = {"data": None, "mtime": 0}
++_redflags_cache = {"data": None, "mtime": 0}
++_phrase_cache = {"data": None, "mtime": 0}
+@@
+ def get_profile():
+     load_profile(force=False)
+     return _profile_cache["data"]
+ 
++def _load_json(path, cache):
++    try:
++        stat = path.stat()
++        if stat.st_mtime != cache["mtime"]:
++            with path.open("r", encoding="utf-8") as f:
++                cache["data"] = json.load(f)
++            cache["mtime"] = stat.st_mtime
++    except FileNotFoundError:
++        cache["data"] = {}
++    except Exception as e:
++        app.logger.error(f"Load error {path.name}: {e}\n{traceback.format_exc()}")
++
++def get_playbooks():
++    _load_json(_PLAYBOOK_PATH, _playbook_cache);  return _playbook_cache["data"]
++def get_redflags():
++    _load_json(_REDFLAGS_PATH, _redflags_cache);  return _redflags_cache["data"]
++def get_phrasebank():
++    _load_json(_PHRASEBANK_PATH, _phrase_cache);  return _phrase_cache["data"]
++
+@@
+ def sanitize(text: str) -> str:
+     p = get_profile()
+     taboo = p.get("taboo_map", {}) or {}
+     out = text
+     for k, v in taboo.items():
+         out = out.replace(k, v)
+     out = out.replace("なのです", "です").replace("のです", "です")
+     return out
++
++# --- ドメイン分類＆レッドフラグ ---
++def classify_domain(text: str) -> str:
++    t = text.lower()
++    if any(k in t for k in ["彼氏","彼女","恋人","浮気","デート","既読"]): return "love"
++    if any(k in t for k in ["上司","部下","会社","職場","会議","納期","SLA".lower()]): return "work"
++    if any(k in t for k in ["家族","親","子","夫","妻","義理"]): return "family"
++    return "general"
++
++def scan_redflags(text: str) -> dict:
++    rf = get_redflags() or {}
++    hit = {"crisis": False, "derailers": [], "stalemate": False}
++    crisis = rf.get("crisis", {}).get("keywords", [])
++    if any(w in text for w in crisis): hit["crisis"] = True
++    for w in (rf.get("derailers", {}).get("generalization", []) + rf.get("derailers", {}).get("personal_attack", [])):
++        if w in text: hit["derailers"].append(w)
++    if any(w in text for w in rf.get("stalemate", {}).get("phrases", [])): hit["stalemate"] = True
++    return hit
++
++def playbook_hint(domain: str, stage: str) -> str:
++    pb = get_playbooks().get("domains", {}).get(domain, {})
++    if not pb: return ""
++    if stage == "S2":
++        outline = " / ".join(pb.get("s2_outline", [])[:3])
++        return f"[S2指針:{outline}]"
++    if stage == "S3":
++        opts = [o.get("label","") for o in pb.get("s3_options", [])][:3]
++        return f"[S3候補:{' | '.join(opts)}]"
++    return ""
+@@
+ def build_messages(sess: dict, user_text: str):
+-    history = sess.get("history", [])
++    history = sess.get("history", [])
+     trimmed = history[-4:] if len(history) > 4 else history[:]
+     stage = sess.get("stage", "S1")
+-    hint = f"[現在ステージ: {stage}. used_surprise={sess.get('used_surprise', False)}]"
++    domain = classify_domain(user_text)
++    hint = f"[現在ステージ:{stage} / domain:{domain} / used_surprise={sess.get('used_surprise', False)}]"
++    # プレイブックの短い指針をsystem側に混ぜる
++    guidance = playbook_hint(domain, stage)
+     msgs = [
+-        {"role": "system", "content": build_system_prompt(sess)},
++        {"role": "system", "content": build_system_prompt(sess) + ("\n" + guidance if guidance else "")},
+         {"role": "user", "content": hint},
+     ]
+     msgs.extend(trimmed)
+     msgs.append({"role": "user", "content": user_text})
+     return msgs
+@@
+ def run_consult_ai(push_to: str, user_text: str) -> str:
+     sess = get_session(push_to)
+@@
+-    messages = build_messages(sess, user_text)
++    # 危機判定（強い語が来たら安全運転）
++    flags = scan_redflags(user_text)
++    if flags.get("crisis"):
++        return "安全確保を最優先にしてください。今は助言より保護が重要です。必要であれば地域の公的相談窓口や110/119等の緊急連絡に繋いでください。落ち着いたら現実/理想/ギャップ/対応を一緒に整理しましょう。"
++
++    messages = build_messages(sess, user_text)
+@@
+     assistant_message = data.get("assistant_message", "").strip()
+@@
+-    # 出力の最終サニタイズ（プロファイル準拠）
++    # 出力の最終サニタイズ（プロファイル準拠）
+     assistant_message = sanitize(assistant_message)
++    # フレーズバンクの締めを付与
++    ph = (get_phrasebank() or {}).get("closers", [])
++    if ph:
++        assistant_message += "\n\n" + ph[0]
