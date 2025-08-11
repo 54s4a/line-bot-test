@@ -2,3 +2,4 @@ flask>=3
 line-bot-sdk>=3
 openai>=1.40.0
 python-dotenv>=1
+gunicorn
