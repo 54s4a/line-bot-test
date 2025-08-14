@@ -53,5 +53,4 @@ def handle_message(event: MessageEvent):
         final_text = "処理中にエラーが発生しました。恐れ入りますが、もう一度お試しください。"
 
     # 判別タグをプレフィックスに付与（このコードが走っているか一目でわかる）
-    prefixed = "[fastapi] " + final_text
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=prefixed))
