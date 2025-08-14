@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ====== asaoka_ai_layers.py ======
-# 相談AI「思想レイヤー分離」ミニ実装（ルールベース最小版）
-# 依存なし。main.py から generate_reply() を呼ぶだけで動作します。
+# 相談AI「思想レイヤー分離」ミニ実装（読みやすい改行＆やや口語寄り）
+# main.py から generate_reply() を呼ぶだけで動作します。
 
 from dataclasses import dataclass
 from typing import Dict, List
@@ -81,34 +81,108 @@ def route(text: str) -> Meta:
 
 def _surprise_hook(meta: Meta) -> str:
     if meta.surprise == "相手視点翻訳":
-        return "【相手視点の仮訳】相手は『自分の緊急性』を最優先にし、あなたの負担や担当範囲を十分に評価していない可能性があります。"
+        return (
+            "【相手視点の仮訳】\n"
+            "相手は『自分の緊急性』を最優先にしているかもしれません。\n"
+            "こちらの負担や担当範囲が十分に考慮されていない可能性があります。"
+        )
     if meta.surprise == "48時間":
-        return "【48時間シミュレーター】48時間後のあなたが後悔しない選択肢は何かを考えてください。"
-    return "【隠れ前提の棚卸し】『断る＝関係が壊れる』という前提を疑ってください。"
+        return (
+            "【48時間シミュレーター】\n"
+            "48時間後の自分が後悔しないのは、どの選択でしょうか。\n"
+            "短期の空気より『線引きの明文化』を残せるかで考えてみてください。"
+        )
+    return (
+        "【隠れ前提の棚卸し】\n"
+        "『断る＝関係が壊れる』という前提を一度疑ってみましょう。\n"
+        "実際は『断り方の言語』が関係の質を左右します。"
+    )
 
 def gen_core(meta: Meta, text: str) -> str:
-    return f"【核】結論を出す前に、前提の置き場を変える必要があります。{_surprise_hook(meta)} 短期の安心と長期のコストは常にトレードです。価値判断を『メリット＝将来の損得』で評価し直し、線引きを言語で固定してください。"
+    # 見出し→空行→本文（短文を改行で区切る／やや口語）
+    return (
+        "【核】\n"
+        "結論を出す前に、前提の置き場を見直す必要があります。\n\n"
+        f"{_surprise_hook(meta)}\n\n"
+        "短期の安心と長期のコストは、いつも交換条件になります。\n"
+        "判断基準を『メリット＝将来の損得』にそろえ、\n"
+        "どこまでやるか（やらないか）の線引きを、言葉で固定しましょう。"
+    )
 
 def gen_neutral(meta: Meta, text: str) -> str:
-    return "【中立】関係を保ちつつ負担を下げる選択肢は次の三つです。A）一時的に対応するが次回以降の条件を明文化する。B）今回は断り代替案を提示する。C）第三者判断に委ねる。"
+    # 箇条書きは行頭改行＆単文で読みやすく
+    return (
+        "【中立】\n"
+        "関係を保ちつつ負担を減らす選択肢は、次の三つです。\n\n"
+        "A) 一時的に対応する。ただし、次回以降の条件を明文化する。\n"
+        "B) 今回は断る。代わりの案（時期・方法・担当）を提示する。\n"
+        "C) 第三者判断に委ねる。個人対立を避け、配分を客観化する。"
+    )
 
 def gen_ops(meta: Meta, text: str) -> OpsLayer:
-    checks = ["依頼の種類（指示かお願いか）を確認", "相手の権限を確認", "職務範囲の文面を添付"]
-    actions = [
-        {"step": "記録化", "how": "経緯をメモに残す", "success": "第三者が再現可能", "risk": "感情語混入", "eta": "10分"},
-        {"step": "返信", "how": "条件付き合意を提示", "success": "条件明確化", "risk": "既成事実化", "eta": "15分"}
+    # 実務は既存の改行形式を維持（読みやすさ良好）
+    checks = [
+        "依頼の種類（指示かお願いか）を確認",
+        "相手の権限を確認",
+        "職務範囲の文面を添付"
     ]
-    templates = {"message": "本件、緊急性は理解しております。担当範囲外のため条件付きで対応可能です。"}
+    actions = [
+        {
+            "step": "記録化",
+            "how": "経緯をメモに残す",
+            "success": "第三者が再現可能",
+            "risk": "感情語の混入",
+            "eta": "10分"
+        },
+        {
+            "step": "返信",
+            "how": "条件付き合意を提示",
+            "success": "条件明確化",
+            "risk": "即時対応の既成事実化",
+            "eta": "15分"
+        }
+    ]
+    templates = {
+        "message": (
+            "本件、緊急性は理解しております。担当範囲外のため、対応する場合は「本日◯分・"
+            "次回は上長判断で配分」を条件にお願いできますか。難しい場合は、上長のご判断をお願いします。"
+        )
+    }
     return OpsLayer(checks=checks, actions=actions, templates=templates)
 
 def integrate(meta: Meta, core: str, neutral: str, ops: OpsLayer) -> str:
+    # 実務レイヤーの整形（行ごとに改行）
     ops_lines = ["【実務】"]
-    ops_lines.append("チェック：" + "　".join(ops.checks))
-    ops_lines.append("アクション：" + "　".join([f"{a['step']}({a['eta']})" for a in ops.actions]))
-    ops_lines.append("テンプレ：" + ops.templates["message"])
-    summary = "【一体化まとめ】短期の雰囲気は将来のコストとトレード。条件を明示し文書化を。"
-    next_moves = "【次の一手】・今：返信送信（15分）・今日：記録（5分）・今週：配分ルール提案（10分）"
+    ops_lines.append("チェック：")
+    for c in ops.checks:
+        ops_lines.append(f"- {c}")
+    ops_lines.append("アクション：")
+    for a in ops.actions:
+        ops_lines.append(f"- {a['step']}（{a['eta']}）")
+        ops_lines.append(f"  ・やり方：{a['how']}")
+        ops_lines.append(f"  ・成功条件：{a['success']}")
+        ops_lines.append(f"  ・リスク：{a['risk']}")
+    if ops.templates.get("message"):
+        ops_lines.append("テンプレ：")
+        ops_lines.append(ops.templates["message"])
+
+    summary = (
+        "【一体化まとめ】\n"
+        "短期の雰囲気は、将来のコストとトレードになります。\n"
+        "引き受けるなら条件を価格として明示し、断るなら代替案と第三者判断の導線を置きましょう。\n"
+        "どちらにせよ、言葉で線引きを固定して自分のメリットを守ることが大切です。"
+    )
+    next_moves = (
+        "【次の一手】\n"
+        "・今：上のテンプレを整えて返信（15分）\n"
+        "・今日：依頼ログを記録（5分）\n"
+        "・今週：配分ルールの明文化を上長に提案（10分）"
+    )
+
+    # 段落は二重改行で区切る。段落内は任意の改行を保持。
     return "\n\n".join([core, neutral, "\n".join(ops_lines), summary, next_moves])
+
+# ========== 公開関数 ==========
 
 def generate_reply(user_text: str) -> Dict:
     meta = route(user_text)
