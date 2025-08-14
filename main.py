@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-# ===== main.py (FastAPI + LINE Messaging API) =====
-# Webhook入口: POST /callback
-# Start Command (Render): uvicorn main:app --host 0.0.0.0 --port $PORT
+# ===== main.py (FastAPI + LINE) =====
+# Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
 
 import os
 import logging
@@ -11,8 +10,9 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
-from asaoka_ai_layers import generate_reply
+from asaoka_ai_layers import generate_reply  # ← ここだけを呼ぶ
 
+# --- ENV ---
 CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 if not CHANNEL_SECRET or not CHANNEL_ACCESS_TOKEN:
@@ -24,33 +24,40 @@ handler = WebhookHandler(CHANNEL_SECRET)
 app = FastAPI(title="AsaokaAI Webhook (FastAPI)")
 
 @app.get("/")
-async def healthcheck():
-    return {"status": "ok", "app": "fastapi", "tag": "v1"}
+async def root():
+    return {"status": "ok", "app": "fastapi-webhook"}
 
 @app.get("/version")
 async def version():
-    return {"running": "fastapi-webhook", "marker": "[fastapi]"}
+    from importlib.util import find_spec
+    return {
+        "openai_installed": bool(find_spec("openai")),
+        "openai_key_set": bool(os.environ.get("OPENAI_API_KEY")),
+        "use_llm_env": os.environ.get("USE_LLM", "1"),
+    }
 
 @app.post("/callback")
 async def callback(request: Request):
     signature = request.headers.get("X-Line-Signature", "")
-    body_bytes = await request.body()
-    body_text = body_bytes.decode("utf-8")
+    body = (await request.body()).decode("utf-8")
     try:
-        handler.handle(body_text, signature)
+        handler.handle(body, signature)
     except InvalidSignatureError:
         raise HTTPException(status_code=400, detail="Invalid signature.")
     return PlainTextResponse("OK")
 
 @handler.add(MessageEvent, message=TextMessage)
-def handle_message(event: MessageEvent):
-    user_text = event.message.text.strip()
+def on_message(event: MessageEvent):
+    user_text = (event.message.text or "").strip()
     try:
-        result = generate_reply(user_text)
-        final_text = result["final"]
+        result = generate_reply(user_text)   # ← レイヤー分離モジュールに委譲
+        final_text = result.get("final") or "処理に失敗しました。もう一度お試しください。"
     except Exception as e:
         logging.exception("generate_reply error: %s", e)
         final_text = "処理中にエラーが発生しました。恐れ入りますが、もう一度お試しください。"
 
-    # 判別タグをプレフィックスに付与（このコードが走っているか一目でわかる）
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=prefixed))
+    # LINEの上限対策（安全に切り詰め）
+    if len(final_text) > 4900:
+        final_text = final_text[:4900] + "…（長文のため省略）"
+
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=final_text))
