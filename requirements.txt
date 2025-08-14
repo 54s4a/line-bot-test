@@ -1,7 +1,6 @@
 fastapi
 uvicorn
 line-bot-sdk
-openai
 python-dotenv
 requests
 openai>=1.40.0
