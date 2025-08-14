@@ -1,1 +1,4 @@
-openai>=1.40.0
+fastapi
+uvicorn
+line-bot-sdk
+openai
